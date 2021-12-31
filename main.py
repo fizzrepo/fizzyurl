@@ -1,7 +1,10 @@
+# main.pu
+
 from flask import Flask, render_template, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from configparser import ConfigParser
-import os, plugins
+import os
+import plugins
 
 configx = ConfigParser()
 config = configx.read('config.ini')

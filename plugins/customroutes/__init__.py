@@ -1,6 +1,6 @@
 from flask import render_template
 
-def run(app, db):
+def run(app, db, config):
     @app.route('/hello')
     def routes_hiroute():
         return "It works!"

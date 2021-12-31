@@ -10,18 +10,21 @@ configx = ConfigParser()
 config = configx.read('config.ini')
 db_enabled = None
 
+def generate_string(length=16):
+    return ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
+
 if not config:
     print('No config.ini found')
     exit()
 
 if configx.get('mysqldatabase','enabled') == 'true':
     db_enabled = True
-    db_host = config["mysqldatabase"]["host"]
-    db_port = config["mysqldatabase"]["port"]
-    db_user = config["mysqldatabase"]["username"]
-    db_pass = config["mysqldatabase"]["password"]
-    db_name = config["mysqldatabase"]["database"]
-    prefix = config["mysqldatabase"]["prefix"]
+    db_host = configx.get('mysqldatabase','host')
+    db_port = configx.get('mysqldatabase','port')
+    db_user = configx.get('mysqldatabase','username')
+    db_pass = configx.get('mysqldatabase','password')
+    db_name = configx.get('mysqldatabase','database')
+    prefix = configx.get('mysqldatabase','prefix')
     db_uri = 'mysql+pymysql://{}:{}@{}:{}/{}'.format(db_user, db_pass, db_host, db_port, db_name)
 
 else:
@@ -33,6 +36,13 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
+if configx.get('app', 'secret_key') == 'random' or configx.get('app', 'secret_key') == '':
+    secret = generate_string(16)
+    configx.set('app', 'secret_key', secret)
+else:
+    secret = configx.get('app', 'secret_key')
+app.config['SECRET_KEY'] = secret
+
 @app.route('/')
 def index():
     return "It works!"
@@ -40,6 +50,10 @@ def index():
 if __name__ == '__main__':
     for i in plugins.getPlugins():
         print("Loading plugin " + i["name"])
-        plugin = plugins.loadPlugin(i)
-        plugin.run(app)
+        disabled = [e.strip() for e in configx.get("plugins", "disabled").split(',')]
+        if i["name"] in disabled:
+            continue
+        else:
+            plugin = plugins.loadPlugin(i)
+            plugin.run(app, db)
     app.run(debug=True)

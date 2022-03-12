@@ -1,18 +1,17 @@
 # main.py
 
+import configparser
 from waitress import serve
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from configparser import ConfigParser
 import os
 import plugins
-
+import databasestuff
+import utils
 configx = ConfigParser()
 config = configx.read('config.ini')
 db_enabled = None
-
-def generate_string(length=16):
-    return ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
 
 if not config:
     print('No config.ini found')
@@ -36,20 +35,44 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+URL = databasestuff.setup(db)
 host = configx.get('app','host')
 port = int(configx.get('app','port'))
 plloaded = 0
+PLUGXD = []
 
 if configx.get('app', 'secret_key') == 'random' or configx.get('app', 'secret_key') == '':
-    secret = generate_string(16)
+    secret = utils.generate_string(16)
     configx.set('app', 'secret_key', secret)
 else:
     secret = configx.get('app', 'secret_key')
 app.config['SECRET_KEY'] = secret
+app.secret_key = secret
+
+print("Loading core")
 
 @app.route('/')
 def index():
-    return "It works!"
+    return "Hello World!"
+
+@app.route('/<shorturl>')
+def redirect(shorturl):
+    url = URL.query.filter_by(shorturl=shorturl).first()
+    if url is None:
+        try:
+            return render_template('{}.html'.format(shorturl=shorturl))
+        except:
+            return "Not found"
+    url.clicks += 1
+    db.session.commit()
+    return redirect(url.originalurl)
+
+@app.route('/api/shorten', methods=['POST'])
+def shorten():
+    url = request.form['url']
+    if not utils.is_valid_url(url):
+        return "Invalid URL", 400
+    return jsonify(utils.shorten_url(db, url, URL))
 
 if __name__ == '__main__':
     print("\nPLUGIN LOADER:")
@@ -63,7 +86,9 @@ if __name__ == '__main__':
             plugin = plugins.loadPlugin(i)
             plugin.run(app, db, configx)
             plloaded += 1
+    db.create_all()
     print("\nLoaded {} plugins".format(plloaded))
     print("HOST: {}".format(host))
     print("PORT: {}".format(port))
+    print("http://{}:{}/".format(host, port))
     serve(app, host=host, port=port)
